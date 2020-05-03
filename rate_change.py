@@ -16,38 +16,73 @@ from bokeh.models import NumeralTickFormatter, LabelSet,ColumnDataSource, Label
 from bokeh.models.tickers import FixedTicker
 from bokeh.layouts import row, column
 
+import requests
 
-dates = pd.read_excel('data/dates.xlsx')['Date'].sort_values()
+# Global Constants
+SERIES_IDS = { 
+        'FFR_upper': 'DFEDTARU', # Federal Funds Target Range - Upper Limit 
+        'IOR': 'IORR',  #  Interest Rate on Required Reserves
+        'FFR': 'DFEDTAR', # Federal Funds Target Rate (DISCONTINUED) 
+        'T-1Month': 'DGS1MO', # 1-Month Treasury Constant Maturity Rate
+        'prate': 'TERMCBPER24NS', # Finance Rate on Personal Loans at Commercial Banks, 24 Month Loan
+        }
+SERIES_TITLES = {
+        'T-1Month': '1 Month Treasury Yield',
+        'prate': '24-Month Personal Loan Rate'
+        }
+URL = 'https://api.stlouisfed.org/fred/series/observations?series_id={}&api_key={}&observation_start={}&sort_order=desc&file_type=json'
+with open('FRED_API_key.txt') as file:
+    KEY = file.read()
+DATA_START_DATE = '2001-07-01'
+IOR_START_DATE = dt(year = 2008, month = 12, day = 16) # When the first IOR payments begin
+DATES = pd.read_excel('data/dates.xlsx')['Date'].sort_values() # FOMC meeting dates
 
-rates = pd.read_csv('data/Daily_7_Day.csv', na_values = '.', index_col = 'DATE',
-                    parse_dates = ['DATE'], infer_datetime_format = True)
-temp = pd.read_csv('data/Daily.csv', na_values = '.', index_col = 'DATE',
-                    parse_dates = ['DATE'], infer_datetime_format = True)
-rates['T-1Month'] = temp['DGS1MO']
-effr = pd.read_csv('data/Monthly.csv', na_values = '.', index_col = 'DATE',
-                    parse_dates = ['DATE'], infer_datetime_format = True)
-rates['effr'] = effr
-rates['effr'] = rates['effr'].fillna(method ='ffill')
+# Global variables to be defined in get_regressors
+name = 'imgs/{}_{}day.png'
+x_title = '1-Month Treasury Yield 24 Hours Before FOMC Meeting'
 
-prate = pd.read_csv('data/TERMCBPER24NS.csv', na_values = '0', 
-                    index_col = 'observation_date',
-                    parse_dates = ['observation_date'], infer_datetime_format = True)
-rates['prate'] =prate
-rates['prate'] = rates['prate'].interpolate('time')
-rates
-#%%
-start = dt(year = 2008, month = 12, day = 16)
-rates.loc[start:,'DFEDTAR'] = rates.loc[start:,'IORR'] 
-rates['T-1Month'] = rates['T-1Month'].fillna(method ='bfill')
-rates['lag1-T-1Month'] = rates['T-1Month'].shift(1)
-rates['lag7-T-1Month'] = rates['T-1Month'].shift(7)
-rates['lag1-prate'] = rates['prate'].shift(1)
-rates['lagged_mean7'] = rates['T-1Month'].rolling('7d', min_periods = 7).mean()
-df = rates.loc[dates, ['DFEDTAR','lag1-prate', 'lag1-T-1Month', 
-                       'lag7-T-1Month', 'lagged_mean7']]/100
+# Gathers data and constructs consolidated dataset
+def get_data():
+    out = {}
+    for k in ('FFR_upper', 'IOR', 'FFR', 'T-1Month', 'prate'):    
+        data = requests.get(URL.format(SERIES_IDS[k], KEY, DATA_START_DATE)).json()
+        data = pd.DataFrame(data['observations'])
+        data.index = pd.DatetimeIndex(data['date'])
+        data['value'] = data['value'].apply(lambda x: float(x)/100 if not x =='.' else np.nan)
+        out[k] = data['value']
+        
+    return pd.DataFrame(out)
 
+# Fill NaNs for forward progation and fills FFR target blanks with IOR
+def fill_NaNs(rates):
+    rates['prate'] = rates['prate'].fillna(method ='ffill')
+    rates.loc[IOR_START_DATE:,'FFR'] = rates.loc[IOR_START_DATE:,'IOR'] 
+    rates['T-1Month'] = rates['T-1Month'].fillna(method ='ffill')
+    
+    return rates
 
-#%%
+# Gets the lagged data for regression and filters unecessary data
+def get_regressor(rates, ser_name, mean = False, lag = 1):
+    global name
+    if not mean:
+        rates['reg'] = rates[ser_name].shift(lag)
+        name = name.format(ser_name, lag)
+    else:        
+        rates['reg'] = rates[ser_name].rolling('{}d'.format(lag)).mean()
+        name = name.format('mean_' + ser_name, lag) 
+    set_title(ser_name, mean, lag)
+    
+    return rates.loc[DATES, ['FFR','reg']]
+
+def set_title(ser_name, mean, lag):
+    global x_title
+    if lag == 1:
+        x_title = '{} 24 Hours Before FOMC Meeting'.format(SERIES_TITLES[ser_name])
+    elif mean:
+        x_title = 'Average {} {} Days Before FOMC Meeting'.format(SERIES_TITLES[ser_name], lag)
+    else:
+        x_title = '{} {} Days Before FOMC Meeting'.format(SERIES_TITLES[ser_name], lag)
+
 def set_up(x, y, truncated = True, margins = None):
     if truncated: 
         b = (3 * y.min() - y.max())/2
@@ -65,81 +100,17 @@ def set_up(x, y, truncated = True, margins = None):
     
     return(x,y,xrng,yrng)
 
-# Chart of non-stationary time series, e.g. NGDP from 2008 to 2020    
-def chart0(df):
-    xdata, ydata, xrng, yrng = set_up(df.index,df['___'])
-    
-    p = figure(width = 1000, height = 500,
-               title= '____', 
-               x_axis_label = 'Date', x_axis_type = 'datetime',
-               y_axis_label = '', 
-               y_range = yrng, x_range = xrng)
-    p.line(xrng,[0,0], color = 'black')
-    
-    p.line(xdata,ydata, color = 'blue', legend = '')
-    
-    p.xaxis[0].ticker.desired_num_ticks = 10
-    p.legend.location = 'top_left'
-    p.ygrid.grid_line_color = None
-    p.yaxis.formatter=NumeralTickFormatter(format="____")
-    
-    export_png(p,'imgs/chart0.png')
-
-    return p
-
-# Chart of approximately stionary time series, e.g. PCE-Core inflation from 2008 to 2020
-def chart1(df):
-    xdata, ydata, xrng, yrng = set_up(df.index, df['__'], truncated = False)
-    
-    p = figure(width = 1000, height = 500,
-               title="Interest👏Rates👏are👏Endogenous👏" , 
-               x_axis_label = 'Date', x_axis_type = 'datetime',
-               y_axis_label = '_', 
-               y_range = yrng, x_range = xrng)
-    p.line(xrng,[0,0], color = 'black')
-    
-    p.line(xdata,ydata, color = 'blue', legend = '_')
-    
-    p.xaxis[0].ticker.desired_num_ticks = 10
-    p.legend.location = 'bottom_right'
-    p.ygrid.grid_line_color = None
-    p.yaxis.formatter=NumeralTickFormatter(format="0.0%")
-
-    export_png(p,'imgs/chart1.png')
-
-    return p
 
 # Chart of a regression e.g. inflation vs money supply
-def chart2(df, ver =1):
-    if ver == 1:
-        name = 'imgs/24hour.png'
-        title = '1-Month Treasury Yield 24 Hours Before FOMC Meeting'
-        xdata, ydata, xrng, yrng = set_up(df['lag1-T-1Month'], df['DFEDTAR'], 
+def chart2(df):
+    xdata, ydata, xrng, yrng = set_up(df['reg'], df['FFR'], 
                                           truncated = False, margins = .005)
-    elif ver == 2:
-        name = 'imgs/7day.png'
-        title = '1-Month Treasury Yield 7 Days Before FOMC Meeting'
-        xdata, ydata, xrng, yrng = set_up(df['lag7-T-1Month'], df['DFEDTAR'], 
-                                          truncated = False, margins = .005)
-    elif ver ==3:
-        name = 'imgs/7day_lagmean.png'
-        title = 'Average 1-Month Treasury Yield 7 Days Before FOMC Meeting'
-        xdata, ydata, xrng, yrng = set_up(df['lagged_mean7'], df['DFEDTAR'], 
-                                          truncated = False, margins = .005)
-    elif ver ==4:
-        name = 'imgs/1day_prate.png'
-        title = '24-Month Personal Loan Rate 24 Hours Before FOMC Meeting'
-        xdata, ydata, xrng, yrng = set_up(df['lag1-prate'], df['DFEDTAR'], 
-                                          truncated = False, margins = .005)
-
-    if ver ==4:
-        yrng = (0, yrng[1])
-    else:
-        xrng = (0, xrng[1])
-        yrng = (0, yrng[1])
+    
+#    xrng = (0, xrng[1])
+#    yrng = (0, yrng[1])
     p = figure(width = 750, height = 600,
                title="Interest👏Rates👏are👏Endogenous👏", 
-               x_axis_label = title, 
+               x_axis_label = x_title, 
                y_axis_label = 'Federal Funds Rate Target', 
                y_range = yrng, x_range = xrng)
     p.line(xrng,[0,0], color = 'black')
@@ -171,7 +142,13 @@ def chart2(df, ver =1):
     export_png(p,name)
     
     return p
-show(row(chart2(df, 1),chart2(df, 2), chart2(df, 3),chart2(df, 4)))
+rates = get_data()
+rates = fill_NaNs(rates)
+df = get_regressor(rates, 'T-1Month', True, 7)
+df2 = get_regressor(rates, 'T-1Month')
+print(df)
+
+show(row(chart2(df), chart2(df2)))
 #show(chart2(df, 1))
 
 #%%
