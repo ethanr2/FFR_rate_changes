@@ -39,7 +39,7 @@ DATES = pd.read_excel('data/dates.xlsx')['Date'].sort_values() # FOMC meeting da
 
 # Global variables to be defined in get_regressors
 name = 'imgs/{}_{}day.png'
-x_title = '1-Month Treasury Yield 24 Hours Before FOMC Meeting'
+x_title = ''
 
 # Gathers data and constructs consolidated dataset
 def get_data():
@@ -106,12 +106,60 @@ def chart2(df):
     xdata, ydata, xrng, yrng = set_up(df['reg'], df['FFR'], 
                                           truncated = False, margins = .005)
     
-#    xrng = (0, xrng[1])
-#    yrng = (0, yrng[1])
+
     p = figure(width = 750, height = 600,
                title="Interest👏Rates👏are👏Endogenous👏", 
                x_axis_label = x_title, 
                y_axis_label = 'Federal Funds Rate Target', 
+               y_range = yrng, x_range = xrng)
+    p.line(xrng,[0,0], color = 'black')
+    p.line([0,0],yrng, color = 'black')
+    
+    
+#    spec = dt(year = 2008, day = 16, month = 9)
+#    p.circle(xdata[spec], ydata[spec], color = 'red', size = 2)
+#    lehman = Label(x = xdata[spec], y = ydata[spec]+.005, 
+#                   text = 'September 16th, 2008')
+#    p.add_layout(lehman)
+#    xdata = xdata.drop(spec)
+#    ydata = ydata.drop(spec)
+    
+    slope, intercept, r_value, p_value, std_err = stats.linregress(xdata, ydata)
+    leg = 'R = {:.4f}, P-Value = {:.4e}, Slope = {:.4f}'.format(r_value,p_value,slope)
+    p.line(xdata, xdata*slope + intercept, legend_label = leg, color = 'black')
+    p.circle(xdata,ydata, color = 'blue',size = 2)
+    
+    p.xaxis[0].ticker.desired_num_ticks = 10
+    p.xgrid.grid_line_color = None
+    p.ygrid.grid_line_color = None
+    p.xaxis.formatter=NumeralTickFormatter(format="0.0%")
+    p.yaxis.formatter=NumeralTickFormatter(format="0.0%")
+    p.legend.location = 'bottom_right'
+    
+    export_png(p,name)
+    
+    return p
+rates = get_data()
+rates = fill_NaNs(rates)
+df = get_regressor(rates, 'T-1Month')
+
+print(df)
+
+show(chart2(df))
+
+#%%
+
+
+
+def chart3(df):
+    xdata, ydata, xrng, yrng = set_up(df['premia'], df['diff'], 
+                                          truncated = False, margins = .0025)
+    
+
+    p = figure(width = 750, height = 600,
+               title="Interest👏Rates👏are👏Endogenous👏", 
+               x_axis_label = '1 Month Treasury Premium 24 Hours Before FOMC Meeting', 
+               y_axis_label = 'Change in FFR', 
                y_range = yrng, x_range = xrng)
     p.line(xrng,[0,0], color = 'black')
     p.line([0,0],yrng, color = 'black')
@@ -129,28 +177,35 @@ def chart2(df):
     p.line(xdata, xdata*slope + intercept, legend_label = leg, color = 'black')
     p.circle(xdata,ydata, color = 'blue',size = 2)
     
-
-    
+    # Residual
+    resid = ydata - (slope*xdata + intercept)
+    resid = resid*100
+    df['resid'] = resid
+    print(resid.sort_values()[:-9:-1])
     
     p.xaxis[0].ticker.desired_num_ticks = 10
     p.xgrid.grid_line_color = None
     p.ygrid.grid_line_color = None
     p.xaxis.formatter=NumeralTickFormatter(format="0.0%")
     p.yaxis.formatter=NumeralTickFormatter(format="0.0%")
-    p.legend.location = 'bottom_right'
+    p.legend.location = 'top_left'
     
     export_png(p,name)
     
-    return p
+    return p,df
+
 rates = get_data()
 rates = fill_NaNs(rates)
-df = get_regressor(rates, 'T-1Month', True, 7)
-df2 = get_regressor(rates, 'T-1Month')
+df = get_regressor(rates, 'T-1Month')
+
 print(df)
-
-show(row(chart2(df), chart2(df2)))
-#show(chart2(df, 1))
-
+temp = rates['FFR'].diff(1)[DATES]
+df['premia'] = df['reg'] - df['FFR']
+df['diff'] = temp
+p, resid = chart3(df)
+#show(p)
+df['unexpected'] = df['diff'] - df['premia']
+ 
 #%%
 
 #xdata, ydata, xrng, yrng = set_up(df['lag1-T-1Month'], df['DFEDTAR'], 
