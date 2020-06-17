@@ -36,6 +36,9 @@ df
 
 with open('data/greenbook_forecasts/1982may.txt') as f:
     lines = f.readlines()
+    years = lines[6].strip().split('    ')
+    
+    print(years)
 
 #%%
 
