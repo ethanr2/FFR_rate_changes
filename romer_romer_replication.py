@@ -33,13 +33,20 @@ def get_intended_rates():
 df = get_intended_rates()
 df
 #%%
-
+SERIES = ('Industrial production (% change) [q_jrfb]', 
+          'GNP implicit deflator (% change) [q_pgnp]', 
+          'Real GNP (% change) [q_gnp72]')
 with open('data/greenbook_forecasts/1982may.txt') as f:
     lines = f.readlines()
-    years = lines[6].strip().split('    ')
-    
-    print(years)
-
+    data = {}
+    data['years'] = lines[6].strip().split('    ')
+    ind = lines[8].find('-')
+    for line in lines:
+        row = line[:ind].strip()    
+        if row in SERIES:
+            data[row] = line[ind:].strip().split('    ')
+            print(line)
+    print(data)
 #%%
 
 
