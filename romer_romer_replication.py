@@ -21,7 +21,7 @@ from bokeh.models.tickers import FixedTicker
 from bokeh.layouts import row, column
 
 import requests
-
+import re
 # Grap Romer and Romer's intended rate change series directly.
 def get_intended_rates():
     int_rate = pd.read_excel('data/RomerandRomerDataAppendix.xls', usecols = [0,1,2])
@@ -33,20 +33,33 @@ def get_intended_rates():
 df = get_intended_rates()
 df
 #%%
-SERIES = ('Industrial production (% change) [q_jrfb]', 
-          'GNP implicit deflator (% change) [q_pgnp]', 
-          'Real GNP (% change) [q_gnp72]')
+SERIES = {
+    'q_jrfb':'IP', 
+    'q_pgnp': 'GNP_Def', 
+    'q_gnp72': 'RGDP'
+    }
+def parse_greenbook(name)
 with open('data/greenbook_forecasts/1982may.txt') as f:
     lines = f.readlines()
     data = {}
     data['years'] = lines[6].strip().split('    ')
+    data['Q'] = lines[7].strip().split('      ')
     ind = lines[8].find('-')
     for line in lines:
-        row = line[:ind].strip()    
-        if row in SERIES:
-            data[row] = line[ind:].strip().split('    ')
-            print(line)
-    print(data)
+        reg = re.search('\[(.*?)\]', line)
+        if reg and reg.group(1) in SERIES:
+            data[reg.group(1)] = line[ind:].strip().split('   ')
+            #rint(line)
+    data = pd.DataFrame(data)
+    for col in SERIES:
+        data[SERIES[col]] = data[col]
+        data.drop(col, axis = 1, inplace= True)
+    # Find the Date of forecast
+    whole_doc = ''.join(lines)
+    reg = re.search(r"'(.*?)'", whole_doc).group(1)
+    
+    data['mtg_date'] = dt.strptime(reg, '_%Y_%m_%d')
+    #print(data)
 #%%
 
 
