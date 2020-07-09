@@ -22,6 +22,8 @@ from bokeh.layouts import row, column
 
 import requests
 import re
+import os
+
 # Grap Romer and Romer's intended rate change series directly.
 def get_intended_rates():
     int_rate = pd.read_excel('data/RomerandRomerDataAppendix.xls', usecols = [0,1,2])
@@ -31,41 +33,77 @@ def get_intended_rates():
     
     return int_rate
 df = get_intended_rates()
-df
+print(df)
+
 #%%
 SERIES = {
     'q_jrfb':'IP', 
     'q_pgnp': 'GNP_Def', 
-    'q_gnp72': 'RGDP'
-    }
-def parse_greenbook(name)
-with open('data/greenbook_forecasts/1982may.txt') as f:
-    lines = f.readlines()
-    data = {}
-    data['years'] = lines[6].strip().split('    ')
-    data['Q'] = lines[7].strip().split('      ')
-    ind = lines[8].find('-')
-    for line in lines:
-        reg = re.search('\[(.*?)\]', line)
-        if reg and reg.group(1) in SERIES:
-            data[reg.group(1)] = line[ind:].strip().split('   ')
-            #rint(line)
-    data = pd.DataFrame(data)
-    for col in SERIES:
-        data[SERIES[col]] = data[col]
-        data.drop(col, axis = 1, inplace= True)
-    # Find the Date of forecast
-    whole_doc = ''.join(lines)
-    reg = re.search(r"'(.*?)'", whole_doc).group(1)
+    'q_gnp72': 'RGDP',
     
-    data['mtg_date'] = dt.strptime(reg, '_%Y_%m_%d')
-    #print(data)
+    }
+def parse_greenbook(name):
+    with open('data/greenbook_forecasts/' + name) as f:
+        lines = f.readlines()
+        data = {}
+        data['years'] = lines[6].strip().split('    ')
+        data['Q'] = lines[7].strip().split('      ')
+        ind = lines[8].find('-')
+        for line in lines:
+            reg = re.search('\[(.*?)\]', line)
+            if reg and reg.group(1) in SERIES:
+                data[reg.group(1)] = line[ind:].strip().split('   ')
+                #rint(line)
+        # Convert data to a DataFrame and fix datatypes.
+        data = pd.DataFrame(data)
+        data['years'] = data['years'].astype(int)
+        data['Q'] = data['Q'].apply(lambda x: int(x[-1]))
+        
+        # Just renaming the columns
+        for col in SERIES:
+            data[SERIES[col]] = data[col]
+            data.drop(col, axis = 1, inplace= True)
+            
+        # Find the date of current forecast
+        whole_doc = ''.join(lines)
+        reg = re.search(r"'(.*?)'", whole_doc).group(1)
+        mtg_date = dt.strptime(reg, '_%Y_%m_%d')
+        mtg_Y = mtg_date.year
+        mtg_Q = (mtg_date.month - 1)//3 + 1
+        data['mtg_date'] = mtg_date
+        data['mtg_Y'] = mtg_Y
+        data['mtg_Q'] = mtg_Q
+        
+        # We need to find the index of the current meeting 
+        crit_1 = data['years'] == mtg_Y
+        crit_2 = data['Q'] == mtg_Q
+        row = data.loc[crit_1 & crit_2,:]
+        idx = row.index[0] 
+        
+        # Using idx, we can now filter relative to the current meeting
+        data = data.iloc[idx - 1: idx + 3,:]
+        
+    return data
+temp = parse_greenbook('1982may.txt')
+temp
 #%%
 
+data = parse_greenbook('1982may.txt')
+# pd.DataFrame(columns = ['years', 'Q', 'IP', 'GNP_Def', 'RGDP', 
+#                               'mtg_date', 'mtg_Y','mtg_Q'])
 
+files = os.scandir('data/greenbook_forecasts')
+i = 4
+#data.iloc[i:i+4,:] = parse_greenbook('1982may.txt')
 
-
-
+df_list = []
+for file in files:
+    print(file.name)
+    
+    df_list.append(parse_greenbook(file.name))
+data = pd.concat(df_list, ignore_index = True)
+data
+#%%
 
 
 
