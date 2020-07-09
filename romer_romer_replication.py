@@ -38,7 +38,8 @@ print(df)
 #%%
 SERIES = {
     'q_jrfb':'IP', 
-    'q_pgnp': 'GNP_Def', 
+    'q_pgnp': 'GNP_Def',
+    'q_pgdp': 'GDP_Def',
     'q_gnp72': 'RGDP',
     
     }
@@ -55,14 +56,16 @@ def parse_greenbook(name):
                 data[reg.group(1)] = line[ind:].strip().split('   ')
                 #rint(line)
         # Convert data to a DataFrame and fix datatypes.
+        print(data)
         data = pd.DataFrame(data)
         data['years'] = data['years'].astype(int)
         data['Q'] = data['Q'].apply(lambda x: int(x[-1]))
         
         # Just renaming the columns
         for col in SERIES:
-            data[SERIES[col]] = data[col]
-            data.drop(col, axis = 1, inplace= True)
+            if col in data:
+                data[SERIES[col]] = data[col]
+                data.drop(col, axis = 1, inplace= True)
             
         # Find the date of current forecast
         whole_doc = ''.join(lines)
