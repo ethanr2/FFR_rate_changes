@@ -56,7 +56,6 @@ def parse_greenbook(name):
                 data[reg.group(1)] = line[ind:].strip().split('   ')
                 #rint(line)
         # Convert data to a DataFrame and fix datatypes.
-        print(data)
         data = pd.DataFrame(data)
         data['years'] = data['years'].astype(int)
         data['Q'] = data['Q'].apply(lambda x: int(x[-1]))
@@ -87,7 +86,7 @@ def parse_greenbook(name):
         data = data.iloc[idx - 1: idx + 3,:]
         
     return data
-temp = parse_greenbook('1982may.txt')
+temp = parse_greenbook('1980august.txt')
 temp
 #%%
 
