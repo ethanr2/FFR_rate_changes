@@ -40,8 +40,11 @@ SERIES = {
     'q_jrfb':'IP', 
     'q_pgnp': 'GNP_Def',
     'q_pgdp': 'GDP_Def',
-    'q_gnp72': 'RGDP',
-    
+    'q_gnp72': 'RGDP_0',
+    'q_gnp82': 'RGDP_1',
+    'q_gdp87_cw': 'RGDP_2',
+    'q_gdp87': 'RGDP_3',
+    'q_gdp92_cw': 'RGDP_4'
     }
 def parse_greenbook(name):
     with open('data/greenbook_forecasts/' + name) as f:
@@ -86,25 +89,18 @@ def parse_greenbook(name):
         data = data.iloc[idx - 1: idx + 3,:]
         
     return data
-temp = parse_greenbook('1980august.txt')
-temp
-#%%
 
-data = parse_greenbook('1982may.txt')
-# pd.DataFrame(columns = ['years', 'Q', 'IP', 'GNP_Def', 'RGDP', 
-#                               'mtg_date', 'mtg_Y','mtg_Q'])
 
 files = os.scandir('data/greenbook_forecasts')
-i = 4
-#data.iloc[i:i+4,:] = parse_greenbook('1982may.txt')
-
 df_list = []
 for file in files:
-    print(file.name)
-    
+    print(file.name)    
     df_list.append(parse_greenbook(file.name))
-data = pd.concat(df_list, ignore_index = True)
-data
+#%%
+data = pd.concat(df_list, ignore_index = True).sort_values('mtg_date')
+
+temp = data.loc[:,['mtg_date','RGDP_0', 'RGDP_1', 'RGDP_2', 'RGDP_3', 'RGDP_4']]
+print(temp)
 #%%
 
 
