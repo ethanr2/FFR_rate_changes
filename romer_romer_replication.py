@@ -92,7 +92,7 @@ def parse_greenbook(name):
 
 
 files = os.scandir('data/greenbook_forecasts')
-df_list = []
+df_list = [] # put all the dataframes in a list to concat later.
 for file in files:
     print(file.name)    
     df_list.append(parse_greenbook(file.name))
@@ -100,7 +100,15 @@ for file in files:
 data = pd.concat(df_list, ignore_index = True).sort_values('mtg_date')
 
 temp = data.loc[:,['mtg_date','RGDP_0', 'RGDP_1', 'RGDP_2', 'RGDP_3', 'RGDP_4']]
-print(temp)
+data['RGDP'] = 0
+for key in ('RGDP_0','RGDP_1', 'RGDP_2', 'RGDP_3', 'RGDP_4'):
+    col = data.pop(key)
+    bools = ~col.isna()
+    data.loc[bools, 'RGDP'] = col[bools] 
+data['pi'] = data.pop('GDP_Def')
+bools = ~data['pi'].isna()
+data.loc[bools, 'pi'] =  data.loc[bools, 'GNP_Def']
+data
 #%%
 
 
