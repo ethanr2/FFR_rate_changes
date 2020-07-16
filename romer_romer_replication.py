@@ -24,6 +24,21 @@ import requests
 import re
 import os
 
+SERIES = {
+    'ru':'U', 
+    'q_pgnp': 'Def_0',
+    'q_pgdp': 'Def_1',
+    'q_pgdp_cw': 'Def_2',
+    'q_gnp72': 'RGDP_0',
+    'q_gnp82': 'RGDP_1',
+    'q_gdp87_cw': 'RGDP_2',
+    'q_gdp87': 'RGDP_3',
+    'q_gdp92_cw': 'RGDP_4'
+    }
+
+
+
+
 # Grap Romer and Romer's intended rate change series directly.
 def get_intended_rates():
     int_rate = pd.read_excel('data/RomerandRomerDataAppendix.xls', usecols = [0,1,2])
@@ -32,20 +47,8 @@ def get_intended_rates():
     int_rate = int_rate.set_index('MTGDATE')
     
     return int_rate
-df = get_intended_rates()
-print(df)
 
-#%%
-SERIES = {
-    'q_jrfb':'IP', 
-    'q_pgnp': 'GNP_Def',
-    'q_pgdp': 'GDP_Def',
-    'q_gnp72': 'RGDP_0',
-    'q_gnp82': 'RGDP_1',
-    'q_gdp87_cw': 'RGDP_2',
-    'q_gdp87': 'RGDP_3',
-    'q_gdp92_cw': 'RGDP_4'
-    }
+# Gets the raw data from each individual Greensheet. 
 def parse_greenbook(name):
     with open('data/greenbook_forecasts/' + name) as f:
         lines = f.readlines()
@@ -90,33 +93,49 @@ def parse_greenbook(name):
         
     return data
 
+def get_raw_data():
+    files = os.scandir('data/greenbook_forecasts')
+    df_list = [] # put all the dataframes in a list to concat later.
+    for file in files:
+        print(file.name)    
+        df_list.append(parse_greenbook(file.name))
+    return pd.concat(df_list, ignore_index = True).sort_values(by =['mtg_date','years','Q'])
 
-files = os.scandir('data/greenbook_forecasts')
-df_list = [] # put all the dataframes in a list to concat later.
-for file in files:
-    print(file.name)    
-    df_list.append(parse_greenbook(file.name))
+def consolidate(data, name, keys):
+    data[name] = 0
+    for key in keys:
+        col = data.pop(key)
+        bools = ~col.isna()
+        data.loc[bools, name] = col[bools].astype(float)
+
+def clean_data(data):
+    consolidate(data, 'RGDP', ('RGDP_0','RGDP_1', 'RGDP_2', 'RGDP_3', 'RGDP_4'))
+    consolidate(data, 'pi', ('Def_0','Def_1', 'Def_2'))
+    data['U'] = data['U'].astype(float)
+    
+    return data
+        
+df = get_intended_rates()
+print(df)
+raw_data = get_raw_data()
+print(raw_data)
 #%%
-data = pd.concat(df_list, ignore_index = True).sort_values('mtg_date')
 
-temp = data.loc[:,['mtg_date','RGDP_0', 'RGDP_1', 'RGDP_2', 'RGDP_3', 'RGDP_4']]
-data['RGDP'] = 0
-for key in ('RGDP_0','RGDP_1', 'RGDP_2', 'RGDP_3', 'RGDP_4'):
-    col = data.pop(key)
-    bools = ~col.isna()
-    data.loc[bools, 'RGDP'] = col[bools] 
-data['pi'] = data.pop('GDP_Def')
-bools = ~data['pi'].isna()
-data.loc[bools, 'pi'] =  data.loc[bools, 'GNP_Def']
-data
-#%%
+# Get_raw_data is intensive, a copy may save time if we need to reload.
+data = raw_data.copy() 
+data = clean_data(data)
+print(data)
 
+# Now that we have the raw data cleaned, we have to adjust and realign the data for the regression
 
+# Convert each year-quarter pair to an absolute quarter datapoint
 
-
-
-
-
+START = (1977, 4) # Quarters measured relative to 1977Q4
+formula = lambda row: (row['years'] - START[0])*4 + row['Q'] - START[1]
+data['rel_q'] = data.apply(formula,axis = 1)
+formula = lambda row: (row['mtg_Y'] - START[0])*4 + row['mtg_Q'] - START[1]
+data['mtg_rel_q'] = data.apply(formula,axis = 1)
+print(data)
 
 
 
