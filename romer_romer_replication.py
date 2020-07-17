@@ -43,11 +43,18 @@ START = (1977, 4) # Quarters measured relative to 1977Q4
 def get_intended_rates():
     int_rate = pd.read_excel('data/RomerandRomerDataAppendix.xls', usecols = [0,1,2])
     int_rate['MTGDATE'] = int_rate['MTGDATE'].astype(str)
-    int_rate['MTGDATE'] = int_rate['MTGDATE'].apply(lambda x: dt.strptime(x, '%m%d%y')) 
+    #we want to drop the information about the day. we're only interested in the month.
+    date_convert = lambda x: dt.strptime(x[-2:].join(x[:-4]), '%m%y')
+    int_rate['mtg_date'] = int_rate.pop('MTGDATE').apply(date_convert) 
+   #int_rate['mtg_date'] = int_rate.pop('MTGDATE').apply(lambda x: x[:-4].join(x[-2:])) 
+    #return int_rate
+    #dates = int_rate['MTGDATE'].apply(lambda x: x.days = 1)
     int_rate = int_rate.set_index('MTGDATE')
     
     return int_rate
-
+temp = get_intended_rates()
+temp
+#%%
 # Gets the raw data from each individual Greensheet. 
 def parse_greenbook(name):
     with open('data/greenbook_forecasts/' + name) as f:
@@ -138,8 +145,12 @@ cleaned_data = clean_data(temp)
 
 # Now that we have the raw data cleaned, we have to adjust and realign the data for the regression
 bools = cleaned_data.apply(lambda row: row['rel_q'] == row['mtg_rel_q'], axis = 1)
-data = cleaned_data.loc[bools,['mtg_date', 'mtg_rel_q', 'U']].reset_index(drop = True)
+data = cleaned_data.loc[bools,['mtg_date', 'mtg_rel_q', 'U']]
+data = data.set_index('mtg_date', drop = True)
 
+data['const'] = 0
+data['ffb_m'] = df['OLDTARG']
+data['u_m,0'] = data.pop('U')
 print(data)
 
 
