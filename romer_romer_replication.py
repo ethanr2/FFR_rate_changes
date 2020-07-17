@@ -36,7 +36,7 @@ SERIES = {
     'q_gdp92_cw': 'RGDP_4'
     }
 
-
+START = (1977, 4) # Quarters measured relative to 1977Q4
 
 
 # Grap Romer and Romer's intended rate change series directly.
@@ -99,7 +99,10 @@ def get_raw_data():
     for file in files:
         print(file.name)    
         df_list.append(parse_greenbook(file.name))
-    return pd.concat(df_list, ignore_index = True).sort_values(by =['mtg_date','years','Q'])
+    df = pd.concat(df_list, ignore_index = True).sort_values(by =['mtg_date','years','Q'])
+    
+    print(df)
+    return df
 
 def consolidate(data, name, keys):
     data[name] = 0
@@ -108,33 +111,35 @@ def consolidate(data, name, keys):
         bools = ~col.isna()
         data.loc[bools, name] = col[bools].astype(float)
 
+# Convert each year-quarter pair to an absolute quarter datapoint
+def rel_q(data):
+    formula = lambda row: (row['years'] - START[0])*4 + row['Q'] - START[1]
+    data['rel_q'] = data.apply(formula,axis = 1)
+    formula = lambda row: (row['mtg_Y'] - START[0])*4 + row['mtg_Q'] - START[1]
+    data['mtg_rel_q'] = data.apply(formula,axis = 1) 
+
 def clean_data(data):
     consolidate(data, 'RGDP', ('RGDP_0','RGDP_1', 'RGDP_2', 'RGDP_3', 'RGDP_4'))
     consolidate(data, 'pi', ('Def_0','Def_1', 'Def_2'))
     data['U'] = data['U'].astype(float)
+    rel_q(data)
     
+    print(data)
     return data
-        
+
 df = get_intended_rates()
-print(df)
 raw_data = get_raw_data()
-print(raw_data)
+
 #%%
 
 # Get_raw_data is intensive, a copy may save time if we need to reload.
-data = raw_data.copy() 
-data = clean_data(data)
-print(data)
+temp = raw_data.copy() 
+cleaned_data = clean_data(temp)
 
 # Now that we have the raw data cleaned, we have to adjust and realign the data for the regression
+bools = cleaned_data.apply(lambda row: row['rel_q'] == row['mtg_rel_q'], axis = 1)
+data = cleaned_data.loc[bools,['mtg_date', 'mtg_rel_q', 'U']].reset_index(drop = True)
 
-# Convert each year-quarter pair to an absolute quarter datapoint
-
-START = (1977, 4) # Quarters measured relative to 1977Q4
-formula = lambda row: (row['years'] - START[0])*4 + row['Q'] - START[1]
-data['rel_q'] = data.apply(formula,axis = 1)
-formula = lambda row: (row['mtg_Y'] - START[0])*4 + row['mtg_Q'] - START[1]
-data['mtg_rel_q'] = data.apply(formula,axis = 1)
 print(data)
 
 
