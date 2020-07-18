@@ -37,24 +37,22 @@ SERIES = {
     }
 
 START = (1977, 4) # Quarters measured relative to 1977Q4
+# Some greensheets appear to be missing, so im truncating the Romer and Romer appendix data.
+TRUNC = (dt(year = 1978, month = 1, day = 1 ), dt(year = 1996, month = 12, day = 1))
 
-
-# Grap Romer and Romer's intended rate change series directly.
+# Grab Romer and Romer's intended rate change series directly.
 def get_intended_rates():
     int_rate = pd.read_excel('data/RomerandRomerDataAppendix.xls', usecols = [0,1,2])
     int_rate['MTGDATE'] = int_rate['MTGDATE'].astype(str)
     #we want to drop the information about the day. we're only interested in the month.
-    date_convert = lambda x: dt.strptime(x[-2:].join(x[:-4]), '%m%y')
+    date_convert = lambda x: dt.strptime(x[-2:] + x[:-4], '%y%m')
     int_rate['mtg_date'] = int_rate.pop('MTGDATE').apply(date_convert) 
-   #int_rate['mtg_date'] = int_rate.pop('MTGDATE').apply(lambda x: x[:-4].join(x[-2:])) 
-    #return int_rate
-    #dates = int_rate['MTGDATE'].apply(lambda x: x.days = 1)
-    int_rate = int_rate.set_index('MTGDATE')
+    int_rate = int_rate.loc[(int_rate['mtg_date'] >= TRUNC[0]), :]
+    int_rate = int_rate.set_index('mtg_date')
     
+    print(int_rate)
     return int_rate
-temp = get_intended_rates()
-temp
-#%%
+
 # Gets the raw data from each individual Greensheet. 
 def parse_greenbook(name):
     with open('data/greenbook_forecasts/' + name) as f:
@@ -82,7 +80,11 @@ def parse_greenbook(name):
         # Find the date of current forecast
         whole_doc = ''.join(lines)
         reg = re.search(r"'(.*?)'", whole_doc).group(1)
-        mtg_date = dt.strptime(reg, '_%Y_%m_%d')
+        #mtg_date = dt.strptime(reg[:8], '_%Y_%m')
+        try:
+            mtg_date = dt.strptime(name[:-4], '%Y%B')
+        except ValueError:
+            mtg_date = dt.strptime(name[:-5], '%Y%B')
         mtg_Y = mtg_date.year
         mtg_Q = (mtg_date.month - 1)//3 + 1
         data['mtg_date'] = mtg_date
@@ -120,17 +122,16 @@ def consolidate(data, name, keys):
 
 # Convert each year-quarter pair to an absolute quarter datapoint
 def rel_q(data):
-    formula = lambda row: (row['years'] - START[0])*4 + row['Q'] - START[1]
-    data['rel_q'] = data.apply(formula,axis = 1)
-    formula = lambda row: (row['mtg_Y'] - START[0])*4 + row['mtg_Q'] - START[1]
-    data['mtg_rel_q'] = data.apply(formula,axis = 1) 
-
+    data['mtg_rel_q'] = (data.pop('mtg_Y') - START[0])*4 + data.pop('mtg_Q') - START[1]
+    abs_q = (data.pop('years') - START[0])*4 + data.pop('Q') - START[1]
+    data['rel_q'] = abs_q - data['mtg_rel_q'] 
+    
 def clean_data(data):
     consolidate(data, 'RGDP', ('RGDP_0','RGDP_1', 'RGDP_2', 'RGDP_3', 'RGDP_4'))
     consolidate(data, 'pi', ('Def_0','Def_1', 'Def_2'))
     data['U'] = data['U'].astype(float)
     rel_q(data)
-    
+    data= data.loc[data['mtg_date'] <= TRUNC[1],:]
     print(data)
     return data
 
@@ -141,19 +142,19 @@ raw_data = get_raw_data()
 
 # Get_raw_data is intensive, a copy may save time if we need to reload.
 temp = raw_data.copy() 
-cleaned_data = clean_data(temp)
+cleaned = clean_data(temp)
 
 # Now that we have the raw data cleaned, we have to adjust and realign the data for the regression
-bools = cleaned_data.apply(lambda row: row['rel_q'] == row['mtg_rel_q'], axis = 1)
-data = cleaned_data.loc[bools,['mtg_date', 'mtg_rel_q', 'U']]
+grouped = cleaned.groupby('rel_q')
+data = grouped.get_group(0)[['mtg_date', 'mtg_rel_q', 'U']]
 data = data.set_index('mtg_date', drop = True)
 
 data['const'] = 0
 data['ffb_m'] = df['OLDTARG']
+#go here
 data['u_m,0'] = data.pop('U')
 print(data)
 
-
-
+#%%
 
 
