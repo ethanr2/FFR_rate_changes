@@ -24,4 +24,14 @@ import requests
 import re
 import os
 
+TRUNC = 1997
 
+rgdp_df = pd.read_excel('data/GBweb_Row_Format.xlsx',sheet_name = 'gRGDP')
+dates = rgdp_df['DATE']
+rgdp_df = rgdp_df.set_index('DATE', drop = True)
+#%%
+rgdp_df = rgdp_df.loc[dates > TRUNC,:]
+
+rgdp_df
+
+#%%
