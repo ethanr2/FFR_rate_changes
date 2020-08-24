@@ -40,8 +40,12 @@ def get_rgdp():
 def get_intended_rates():
     int_rate = pd.read_excel('data/RomerandRomerDataAppendix.xls', usecols = [0,1,2])
     int_rate['MTGDATE'] = int_rate['MTGDATE'].astype(str)
-    #we want to drop the information about the day. we're only interested in the month.
-    date_convert = lambda x: dt.strptime(x, '%m%d%y')
+    
+    # Weird parsing glitch because the dates were not zero padded. Might have cleaner fix.
+    date_convert = lambda x: dt(year = int(x[-2:]) + 1900, 
+                                day = int(x[-4:-2]), 
+                                month = int(x[:-4]))
+    
     int_rate['mtg_date'] = int_rate.pop('MTGDATE').apply(date_convert) 
     dates = int_rate['mtg_date']
     int_rate = int_rate.loc[(TRUNC[0] < dates) & (dates < TRUNC[1]), :]
@@ -49,12 +53,21 @@ def get_intended_rates():
     return int_rate.sort_index()
 rgdp = get_rgdp()
 int_rate = get_intended_rates()
-rgdp['ffr'] = int_rate['OLDTARG']
 
+#%%
 ir_date = int_rate.pop('mtg_date')
 rgdp_date = rgdp.index.to_series()
 
+# Corresponding MTG date associated with greenbook forecast
+rgdp['mtg_date'] = pd.NaT
+
 for date in ir_date:
     i= rgdp_date.searchsorted(date) -1
+    if i == 269:
+        break
+    rgdp.iloc[i,4] = date
+    
     print('ir_date: {}, rgdp_Date: {}'.format(date, rgdp_date.iloc[i]))
+rgdp = rgdp.reset_index().set_index('mtg_date')
+rgdp['ffr'] = int_rate['OLDTARG']
 #%%

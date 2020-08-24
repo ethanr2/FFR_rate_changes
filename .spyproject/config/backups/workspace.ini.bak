@@ -6,5 +6,5 @@ save_non_project_files = False
 
 [main]
 version = 0.2.0
-recent_files = ['rr_replication_excellversion.py']
+recent_files = ['rr_replication_excellversion.py', 'romer_romer_replication.py']
 
